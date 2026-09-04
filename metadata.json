@@ -1,0 +1,7 @@
+{
+  "name": "GastosApp",
+  "description": "Control inteligente de gastos hormiga y retos de ahorro diario",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

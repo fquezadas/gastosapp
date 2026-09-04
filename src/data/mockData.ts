@@ -1,0 +1,152 @@
+import { Transaction, Challenge, BudgetSettings, NotificationItem } from '../types';
+
+export const USER_AVATAR = 'https://lh3.googleusercontent.com/aida-public/AB6AXuAl5FXmVypB1tgDduKuGb1CAch3gA-LodcAWcjetryJ2BpADNonTwn4Un8GLQj97B-kHiD2gdZBWarwabw_1CQiti7WfYDjrC1tm_HBEsP5eOyPvsbxT6Rb_BSwSOcTwFcAXUzv1qP79Iu_JJZvc1TFdU-K5DJ5u7ffbf7XDEFaowr0c-tKfqkTRPy00PKUxq12JaF-N62NaMcwUJXhFQSQYF6xPlkDmHj9OjANt2vTXg4cUscyVV-f';
+
+export const INITIAL_BUDGET: BudgetSettings = {
+  dailyLimit: 10000,
+  alertAt80: true,
+};
+
+export const INITIAL_TRANSACTIONS: Transaction[] = [
+  {
+    id: 'tx-1',
+    title: 'Café cortado',
+    place: 'Cafetería Local',
+    time: '09:15 AM',
+    category: 'cafe',
+    amount: 1900,
+    date: new Date().toISOString().split('T')[0],
+    isToday: true,
+    notes: 'Café de grano',
+  },
+  {
+    id: 'tx-2',
+    title: 'Snack de tarde',
+    place: 'Almacén de barrio',
+    time: '03:30 PM',
+    category: 'snacks',
+    amount: 1500,
+    date: new Date().toISOString().split('T')[0],
+    isToday: true,
+    notes: 'Galletas y fruto seco',
+  },
+  {
+    id: 'tx-3',
+    title: 'Viaje Metro / Micro',
+    place: 'Transporte',
+    time: 'Ayer',
+    category: 'transporte',
+    amount: 830,
+    date: 'Ayer',
+    isToday: false,
+    notes: 'Horario punta',
+  },
+  {
+    id: 'tx-4',
+    title: 'Bebida isotónica',
+    place: 'Kiosco',
+    time: 'Hace 2 días',
+    category: 'bebidas',
+    amount: 2200,
+    date: 'Hace 2 días',
+    isToday: false,
+    notes: 'Hidratación',
+  },
+];
+
+export const INITIAL_CHALLENGES: Challenge[] = [
+  {
+    id: 'ch-1',
+    title: 'Reto 7 días sin antojos',
+    subtitle: 'Día 4 de 7 completados',
+    category: 'antojos',
+    icon: 'local_cafe',
+    currentDay: 4,
+    totalDays: 7,
+    status: 'active',
+    currentAmount: 15000,
+    targetAmount: 26000,
+    rewardNote: 'Faltan 3 días para reclamar recompensa',
+    iconBgClass: 'bg-[#ffdcc5]/50',
+    iconTextClass: 'text-[#944a00]',
+    estMonthlySavings: 60000,
+  },
+  {
+    id: 'ch-2',
+    title: 'Fin de semana sin delivery',
+    subtitle: 'Día 2 de 2 completados',
+    category: 'delivery',
+    icon: 'two_wheeler',
+    currentDay: 2,
+    totalDays: 2,
+    status: 'completed',
+    currentAmount: 45000,
+    targetAmount: 45000,
+    rewardNote: '¡Recompensa desbloqueada!',
+    iconBgClass: 'bg-[#dee8ff]',
+    iconTextClass: 'text-[#006c49]',
+    estMonthlySavings: 45000,
+  },
+];
+
+export const SUGGESTED_CHALLENGES: Challenge[] = [
+  {
+    id: 'sug-1',
+    title: 'Adiós Botellas de Plástico',
+    subtitle: 'Ahorra llevando tu propia botella',
+    category: 'bebidas',
+    icon: 'water_drop',
+    currentDay: 0,
+    totalDays: 30,
+    status: 'suggested',
+    currentAmount: 0,
+    targetAmount: 20000,
+    rewardNote: 'Ahorro estimado mensual',
+    iconBgClass: 'bg-[#ffdcc5]/50',
+    iconTextClass: 'text-[#944a00]',
+    estMonthlySavings: 20000,
+  },
+  {
+    id: 'sug-2',
+    title: 'Desafío Cero Suscripciones Fantasmas',
+    subtitle: 'Cancela servicios que no usas',
+    category: 'servicios',
+    icon: 'bolt',
+    currentDay: 0,
+    totalDays: 1,
+    status: 'suggested',
+    currentAmount: 0,
+    targetAmount: 50000,
+    rewardNote: 'Ahorro recurrente mensual',
+    iconBgClass: 'bg-[#6ffbbe]/30',
+    iconTextClass: 'text-[#006c49]',
+    estMonthlySavings: 50000,
+  },
+];
+
+export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
+  {
+    id: 'notif-1',
+    title: '¡Meta de ahorro alcanzada!',
+    message: 'Completaste el reto "Fin de semana sin delivery" y ahorraste $45.000 CLP.',
+    time: 'Hace 2 horas',
+    read: false,
+    type: 'challenge',
+  },
+  {
+    id: 'notif-2',
+    title: 'Alerta de gasto hormiga',
+    message: 'Llevas $3.400 de tu límite de $10.000 CLP hoy. Vas por buen camino.',
+    time: 'Hace 4 horas',
+    read: false,
+    type: 'alert',
+  },
+  {
+    id: 'notif-3',
+    title: 'Recomendación del día',
+    message: 'Preparar café en casa hoy puede ahorrarte hasta $2.500 CLP.',
+    time: 'Ayer',
+    read: true,
+    type: 'tip',
+  },
+];
