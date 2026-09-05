@@ -1,10 +1,11 @@
--- ==========================================
--- GASTOSAPP - SUPABASE DATABASE SCHEMA
--- ==========================================
+-- ========================================================
+-- GASTOSAPP - SUPABASE MULTI-TENANT DATABASE SCHEMA (RLS)
+-- ========================================================
 
--- 1. Tabla de Gastos / Transacciones
+-- 1. Tabla de Gastos / Transacciones por usuario
 CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
   title TEXT NOT NULL,
   place TEXT,
   time TEXT,
@@ -16,17 +17,34 @@ CREATE TABLE IF NOT EXISTS transactions (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Tabla de Configuración de Presupuesto
+-- Si la columna user_id no existe por migraciones previas, agregarla
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='transactions' AND column_name='user_id') THEN
+    ALTER TABLE transactions ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid();
+  END IF;
+END $$;
+
+-- 2. Tabla de Configuración de Presupuesto por usuario
 CREATE TABLE IF NOT EXISTS budget_settings (
-  id TEXT PRIMARY KEY DEFAULT 'default',
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
   daily_limit NUMERIC NOT NULL DEFAULT 10000,
   alert_at_80 BOOLEAN DEFAULT true,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Tabla de Retos de Ahorro
+-- Si budget_settings tenía columna id de esquema previo, adaptar
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='budget_settings' AND column_name='user_id') THEN
+    ALTER TABLE budget_settings ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid();
+  END IF;
+END $$;
+
+-- 3. Tabla de Retos de Ahorro por usuario
 CREATE TABLE IF NOT EXISTS challenges (
-  id TEXT PRIMARY KEY,
+  id TEXT NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
   title TEXT NOT NULL,
   subtitle TEXT,
   category TEXT,
@@ -40,29 +58,49 @@ CREATE TABLE IF NOT EXISTS challenges (
   icon_bg_class TEXT,
   icon_text_class TEXT,
   est_monthly_savings NUMERIC DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (id, user_id)
 );
 
--- Habilitar Row Level Security (RLS)
+-- Si la columna user_id no existía en challenges
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='challenges' AND column_name='user_id') THEN
+    ALTER TABLE challenges ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid();
+  END IF;
+END $$;
+
+-- ========================================================
+-- ROW LEVEL SECURITY (RLS) - SEGURIDAD Y AISLAMIENTO
+-- ========================================================
+
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE budget_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE challenges ENABLE ROW LEVEL SECURITY;
 
--- Políticas públicas para desarrollo/uso personal
-CREATE POLICY "Permitir todo acceso a transacciones" ON transactions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir todo acceso a presupuesto" ON budget_settings FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir todo acceso a retos" ON challenges FOR ALL USING (true) WITH CHECK (true);
+-- Limpiar políticas anteriores
+DROP POLICY IF EXISTS "Permitir todo acceso a transacciones" ON transactions;
+DROP POLICY IF EXISTS "Permitir todo acceso a presupuesto" ON budget_settings;
+DROP POLICY IF EXISTS "Permitir todo acceso a retos" ON challenges;
+DROP POLICY IF EXISTS "Usuarios gestionan sus propias transacciones" ON transactions;
+DROP POLICY IF EXISTS "Usuarios gestionan su propio presupuesto" ON budget_settings;
+DROP POLICY IF EXISTS "Usuarios gestionan sus propios retos" ON challenges;
 
--- Insertar configuración inicial por defecto
-INSERT INTO budget_settings (id, daily_limit, alert_at_80)
-VALUES ('default', 10000, true)
-ON CONFLICT (id) DO NOTHING;
+-- Políticas multi-usuario estrictas (Cada usuario SOLO ve y manipula sus datos)
+CREATE POLICY "Usuarios gestionan sus propias transacciones" 
+  ON transactions FOR ALL 
+  TO authenticated 
+  USING (auth.uid() = user_id) 
+  WITH CHECK (auth.uid() = user_id);
 
--- Insertar retos iniciales
-INSERT INTO challenges (id, title, subtitle, category, icon, current_day, total_days, status, current_amount, target_amount, reward_note, icon_bg_class, icon_text_class, est_monthly_savings)
-VALUES
-  ('ch-1', 'Reto 7 días sin antojos', 'Día 4 de 7 completados', 'antojos', 'local_cafe', 4, 7, 'active', 15000, 26000, 'Faltan 3 días para reclamar recompensa', 'bg-[#ffdcc5]/50', 'text-[#944a00]', 60000),
-  ('ch-2', 'Fin de semana sin delivery', 'Día 2 de 2 completados', 'delivery', 'two_wheeler', 2, 2, 'completed', 45000, 45000, '¡Recompensa desbloqueada!', 'bg-[#dee8ff]', 'text-[#006c49]', 45000),
-  ('sug-1', 'Adiós Botellas de Plástico', 'Ahorra llevando tu propio termo', 'bebidas', 'water_drop', 0, 30, 'suggested', 0, 20000, 'Ahorro estimado mensual', 'bg-[#ffdcc5]/50', 'text-[#944a00]', 20000),
-  ('sug-2', 'Desafío Cero Suscripciones Fantasmas', 'Cancela lo que no usas', 'servicios', 'bolt', 0, 1, 'suggested', 0, 50000, 'Ahorro recurrente mensual', 'bg-[#6ffbbe]/30', 'text-[#006c49]', 50000)
-ON CONFLICT (id) DO NOTHING;
+CREATE POLICY "Usuarios gestionan su propio presupuesto" 
+  ON budget_settings FOR ALL 
+  TO authenticated 
+  USING (auth.uid() = user_id) 
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Usuarios gestionan sus propios retos" 
+  ON challenges FOR ALL 
+  TO authenticated 
+  USING (auth.uid() = user_id) 
+  WITH CHECK (auth.uid() = user_id);

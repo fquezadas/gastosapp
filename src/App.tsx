@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ScreenTab, Transaction, BudgetSettings, Challenge, NotificationItem } from './types';
+import { ScreenTab, Transaction, BudgetSettings, Challenge, NotificationItem, UserProfile } from './types';
 import {
   INITIAL_BUDGET,
   INITIAL_TRANSACTIONS,
@@ -16,8 +16,10 @@ import { SavingsScreen } from './components/screens/SavingsScreen';
 import { BudgetSettingsScreen } from './components/screens/BudgetSettingsScreen';
 import { NotificationsModal } from './components/NotificationsModal';
 import { AllTransactionsModal } from './components/AllTransactionsModal';
+import { LoginScreen } from './components/LoginScreen';
 import { formatCLP } from './utils/formatters';
 import { isSupabaseConfigured } from './lib/supabase';
+import { getCurrentUser, onAuthStateChange, signOut } from './services/authService';
 import {
   getTransactions,
   createTransaction,
@@ -31,6 +33,9 @@ import {
 export default function App() {
   const [currentTab, setCurrentTab] = useState<ScreenTab>('dashboard');
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isGuestMode, setIsGuestMode] = useState<boolean>(false);
+
   const isCloudConnected = isSupabaseConfigured();
 
   // Transactions State
@@ -54,11 +59,42 @@ export default function App() {
   const [isAllTransactionsOpen, setIsAllTransactionsOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Load initial data from Supabase / localStorage fallback
+  // Listen to Auth State
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const activeUser = await getCurrentUser();
+        setUser(activeUser);
+      } catch (err) {
+        console.error('Auth check error:', err);
+      }
+    }
+
+    checkAuth();
+
+    const { data: authSubscription } = onAuthStateChange((updatedUser) => {
+      setUser(updatedUser);
+      if (updatedUser) {
+        setIsGuestMode(false);
+      }
+    });
+
+    return () => {
+      authSubscription?.subscription?.unsubscribe();
+    };
+  }, []);
+
+  // Load data when user changes or enters guest mode
   useEffect(() => {
     let isMounted = true;
 
-    async function loadInitialData() {
+    async function loadData() {
+      // Don't fetch if not logged in and not in guest mode
+      if (!user && !isGuestMode) {
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
         const [txs, bgt, chs] = await Promise.all([
@@ -76,7 +112,7 @@ export default function App() {
           }
         }
       } catch (err) {
-        console.error('Error loading initial data:', err);
+        console.error('Error loading data:', err);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -84,12 +120,12 @@ export default function App() {
       }
     }
 
-    loadInitialData();
+    loadData();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [user, isGuestMode]);
 
   // Sync notifications to localStorage
   useEffect(() => {
@@ -103,12 +139,20 @@ export default function App() {
     }, 3000);
   };
 
+  const handleLogout = async () => {
+    await signOut();
+    setUser(null);
+    setIsGuestMode(false);
+    showToast('Sesión cerrada');
+  };
+
   // Add Transaction Handler
   const handleAddTransaction = async (newTx: Omit<Transaction, 'id'>) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const created: Transaction = {
       ...newTx,
       id: `tx-${Date.now()}`,
+      userId: user?.id,
       date: newTx.date || todayStr,
       isToday: newTx.isToday ?? (newTx.date === todayStr),
     };
@@ -204,6 +248,7 @@ export default function App() {
     const newActive: Challenge = {
       ...sug,
       id: `active-${Date.now()}`,
+      userId: user?.id,
       status: 'active',
       currentDay: 1,
       currentAmount: Math.round(sug.targetAmount * 0.1),
@@ -216,6 +261,11 @@ export default function App() {
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  // Show Login Screen if not authenticated and not in guest mode
+  if (!user && !isGuestMode) {
+    return <LoginScreen onContinueAsGuest={() => setIsGuestMode(true)} />;
+  }
 
   if (isLoading) {
     return (
@@ -234,8 +284,8 @@ export default function App() {
       {/* Sync Status Banner */}
       <div className="w-full bg-[#111c2d] text-white text-[11px] font-medium py-1 px-4 flex items-center justify-between border-b border-white/5">
         <div className="flex items-center gap-1.5">
-          <span className={`w-2 h-2 rounded-full ${isCloudConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
-          <span>{isCloudConnected ? 'Supabase Conectado (Nube)' : 'Modo Local (Offline)'}</span>
+          <span className={`w-2 h-2 rounded-full ${user ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+          <span>{user ? `Cuenta: ${user.email || user.name}` : 'Modo Demo (Local)'}</span>
         </div>
         <span className="text-white/60 text-[10px]">CLP ($)</span>
       </div>
@@ -243,8 +293,10 @@ export default function App() {
       {/* Persistent Top Header */}
       <Header
         currentTab={currentTab}
+        user={user}
         onNavigate={setCurrentTab}
         onOpenNotifications={() => setIsNotificationsOpen(true)}
+        onLogout={handleLogout}
         unreadNotificationsCount={unreadCount}
       />
 

@@ -1,7 +1,15 @@
 export type ScreenTab = 'dashboard' | 'add' | 'stats' | 'savings' | 'budget';
 
+export interface UserProfile {
+  id: string;
+  email?: string;
+  name: string;
+  avatarUrl?: string;
+}
+
 export interface Transaction {
   id: string;
+  userId?: string;
   title: string;
   place: string;
   time: string;
@@ -23,6 +31,7 @@ export interface CategoryInfo {
 
 export interface Challenge {
   id: string;
+  userId?: string;
   title: string;
   subtitle: string;
   category: string;
@@ -39,6 +48,7 @@ export interface Challenge {
 }
 
 export interface BudgetSettings {
+  userId?: string;
   dailyLimit: number; // CLP
   alertAt80: boolean;
 }

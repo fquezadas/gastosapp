@@ -15,22 +15,37 @@ const STORAGE_KEYS = {
   SUGGESTED_CHALLENGES: 'gastosapp_suggested_challenges',
 };
 
+// Helper to get active Supabase user id
+async function getAuthUserId(): Promise<string | null> {
+  if (!isSupabaseConfigured() || !supabase) return null;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.user?.id || null;
+  } catch {
+    return null;
+  }
+}
+
 // ==========================================
 // TRANSACTIONS
 // ==========================================
 
 export async function getTransactions(): Promise<Transaction[]> {
-  if (isSupabaseConfigured() && supabase) {
+  const userId = await getAuthUserId();
+
+  if (isSupabaseConfigured() && supabase && userId) {
     try {
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      if (data && data.length > 0) {
+      if (data) {
         return data.map((row) => ({
           id: row.id,
+          userId: row.user_id,
           title: row.title,
           place: row.place || '',
           time: row.time || '',
@@ -42,7 +57,7 @@ export async function getTransactions(): Promise<Transaction[]> {
         }));
       }
     } catch (err) {
-      console.warn('Error fetching transactions from Supabase, using localStorage fallback:', err);
+      console.warn('Error fetching transactions from Supabase:', err);
     }
   }
 
@@ -52,11 +67,14 @@ export async function getTransactions(): Promise<Transaction[]> {
 }
 
 export async function createTransaction(tx: Transaction): Promise<void> {
-  if (isSupabaseConfigured() && supabase) {
+  const userId = await getAuthUserId();
+
+  if (isSupabaseConfigured() && supabase && userId) {
     try {
       const { error } = await supabase.from('transactions').insert([
         {
           id: tx.id,
+          user_id: userId,
           title: tx.title,
           place: tx.place,
           time: tx.time,
@@ -80,9 +98,15 @@ export async function createTransaction(tx: Transaction): Promise<void> {
 }
 
 export async function removeTransaction(id: string): Promise<void> {
-  if (isSupabaseConfigured() && supabase) {
+  const userId = await getAuthUserId();
+
+  if (isSupabaseConfigured() && supabase && userId) {
     try {
-      const { error } = await supabase.from('transactions').delete().eq('id', id);
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
       if (error) throw error;
     } catch (err) {
       console.warn('Error removing transaction from Supabase:', err);
@@ -105,23 +129,36 @@ export async function removeTransaction(id: string): Promise<void> {
 // ==========================================
 
 export async function getBudgetSettings(): Promise<BudgetSettings> {
-  if (isSupabaseConfigured() && supabase) {
+  const userId = await getAuthUserId();
+
+  if (isSupabaseConfigured() && supabase && userId) {
     try {
       const { data, error } = await supabase
         .from('budget_settings')
         .select('*')
-        .eq('id', 'default')
+        .eq('user_id', userId)
         .maybeSingle();
 
       if (error) throw error;
       if (data) {
         return {
+          userId: data.user_id,
           dailyLimit: Number(data.daily_limit),
           alertAt80: Boolean(data.alert_at_80),
         };
       }
+
+      // If user doesn't have budget row yet, insert default
+      await supabase.from('budget_settings').insert([
+        {
+          user_id: userId,
+          daily_limit: INITIAL_BUDGET.dailyLimit,
+          alert_at_80: INITIAL_BUDGET.alertAt80,
+        },
+      ]);
+      return { ...INITIAL_BUDGET, userId };
     } catch (err) {
-      console.warn('Error fetching budget from Supabase, using localStorage fallback:', err);
+      console.warn('Error fetching budget from Supabase:', err);
     }
   }
 
@@ -131,11 +168,13 @@ export async function getBudgetSettings(): Promise<BudgetSettings> {
 }
 
 export async function saveBudgetSettings(budget: BudgetSettings): Promise<void> {
-  if (isSupabaseConfigured() && supabase) {
+  const userId = await getAuthUserId();
+
+  if (isSupabaseConfigured() && supabase && userId) {
     try {
       const { error } = await supabase.from('budget_settings').upsert([
         {
-          id: 'default',
+          user_id: userId,
           daily_limit: budget.dailyLimit,
           alert_at_80: budget.alertAt80,
           updated_at: new Date().toISOString(),
@@ -159,14 +198,21 @@ export async function getChallenges(): Promise<{
   activeChallenges: Challenge[];
   suggestedChallenges: Challenge[];
 }> {
-  if (isSupabaseConfigured() && supabase) {
+  const userId = await getAuthUserId();
+
+  if (isSupabaseConfigured() && supabase && userId) {
     try {
-      const { data, error } = await supabase.from('challenges').select('*');
+      const { data, error } = await supabase
+        .from('challenges')
+        .select('*')
+        .eq('user_id', userId);
+
       if (error) throw error;
 
       if (data && data.length > 0) {
         const all: Challenge[] = data.map((row) => ({
           id: row.id,
+          userId: row.user_id,
           title: row.title,
           subtitle: row.subtitle || '',
           category: row.category || '',
@@ -187,8 +233,33 @@ export async function getChallenges(): Promise<{
 
         return { activeChallenges, suggestedChallenges };
       }
+
+      // If new user, seed initial challenges in Supabase
+      const initialSeed = [...INITIAL_CHALLENGES, ...SUGGESTED_CHALLENGES].map((ch) => ({
+        id: ch.id,
+        user_id: userId,
+        title: ch.title,
+        subtitle: ch.subtitle,
+        category: ch.category,
+        icon: ch.icon,
+        current_day: ch.currentDay,
+        total_days: ch.totalDays,
+        status: ch.status,
+        current_amount: ch.currentAmount,
+        target_amount: ch.targetAmount,
+        reward_note: ch.rewardNote,
+        icon_bg_class: ch.iconBgClass,
+        icon_text_class: ch.iconTextClass,
+        est_monthly_savings: ch.estMonthlySavings || 0,
+      }));
+
+      await supabase.from('challenges').insert(initialSeed);
+      return {
+        activeChallenges: INITIAL_CHALLENGES,
+        suggestedChallenges: SUGGESTED_CHALLENGES,
+      };
     } catch (err) {
-      console.warn('Error fetching challenges from Supabase, using localStorage fallback:', err);
+      console.warn('Error fetching challenges from Supabase:', err);
     }
   }
 
@@ -203,11 +274,14 @@ export async function getChallenges(): Promise<{
 }
 
 export async function saveChallengeProgress(challenge: Challenge): Promise<void> {
-  if (isSupabaseConfigured() && supabase) {
+  const userId = await getAuthUserId();
+
+  if (isSupabaseConfigured() && supabase && userId) {
     try {
       const { error } = await supabase.from('challenges').upsert([
         {
           id: challenge.id,
+          user_id: userId,
           title: challenge.title,
           subtitle: challenge.subtitle,
           category: challenge.category,
