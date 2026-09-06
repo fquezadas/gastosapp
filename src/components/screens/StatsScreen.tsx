@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Transaction, ScreenTab } from '../../types';
 import { formatCLP } from '../../utils/formatters';
 
@@ -7,31 +7,57 @@ interface StatsScreenProps {
   onNavigate: (tab: ScreenTab) => void;
 }
 
+const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+// Generate last 6 months starting from current month backwards
+function getLast6Months(): { label: string; year: number; month: number }[] {
+  const result = [];
+  const now = new Date();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    result.push({
+      label: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`,
+      year: d.getFullYear(),
+      month: d.getMonth(), // 0-indexed
+    });
+  }
+  return result;
+}
+
 export const StatsScreen: React.FC<StatsScreenProps> = ({ transactions, onNavigate }) => {
-  const [selectedMonth, setSelectedMonth] = useState<string>('Marzo');
+  const months = useMemo(() => getLast6Months(), []);
+  const [selectedMonthLabel, setSelectedMonthLabel] = useState<string>(months[0].label);
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState<boolean>(false);
 
-  const months = ['Enero', 'Febrero', 'Marzo', 'Abril'];
+  const selectedPeriod = months.find((m) => m.label === selectedMonthLabel) ?? months[0];
 
-  // Calculate totals from transactions or fallback
-  const totalAmount = transactions.length > 0
-    ? transactions.reduce((acc, t) => acc + t.amount, 0)
-    : 142500;
+  // Filter transactions for the selected month/year
+  const filteredTx = useMemo(() => transactions.filter((t) => {
+    if (!t.date) return false;
+    const d = new Date(t.date);
+    return d.getFullYear() === selectedPeriod.year && d.getMonth() === selectedPeriod.month;
+  }), [transactions, selectedPeriod]);
 
-  const cafeTotal = transactions
+  const isCurrentMonth = selectedPeriod.year === new Date().getFullYear() && selectedPeriod.month === new Date().getMonth();
+
+  // Calculate totals (no fallback when real data exists)
+  const totalAmount = filteredTx.reduce((acc, t) => acc + t.amount, 0);
+
+  const cafeTotal = filteredTx
     .filter((t) => t.category === 'cafe' || t.category === 'bebidas')
-    .reduce((acc, t) => acc + t.amount, 0) || 64000;
+    .reduce((acc, t) => acc + t.amount, 0);
 
-  const snacksTotal = transactions
+  const snacksTotal = filteredTx
     .filter((t) => t.category === 'snacks' || t.category === 'antojos')
-    .reduce((acc, t) => acc + t.amount, 0) || 42500;
+    .reduce((acc, t) => acc + t.amount, 0);
 
-  const otrosTotal = transactions
+  const otrosTotal = filteredTx
     .filter((t) => t.category === 'transporte' || t.category === 'otros')
-    .reduce((acc, t) => acc + t.amount, 0) || 36000;
+    .reduce((acc, t) => acc + t.amount, 0);
 
-  const cafePct = Math.round((cafeTotal / (totalAmount || 1)) * 100) || 45;
-  const snacksPct = Math.round((snacksTotal / (totalAmount || 1)) * 100) || 30;
+  const cafePct = Math.round((cafeTotal / (totalAmount || 1)) * 100);
+  const snacksPct = Math.round((snacksTotal / (totalAmount || 1)) * 100);
   const otrosPct = Math.max(0, 100 - cafePct - snacksPct);
 
   return (
@@ -48,26 +74,26 @@ export const StatsScreen: React.FC<StatsScreenProps> = ({ transactions, onNaviga
           className="bg-[#f0f3ff] hover:bg-[#dee8ff] px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 text-sm font-bold text-[#006c49] transition-colors shadow-2xs"
         >
           <span className="material-symbols-outlined text-sm">calendar_month</span>
-          <span>{selectedMonth}</span>
+          <span>{selectedMonthLabel}</span>
         </button>
 
         {/* Dropdown for month */}
         {isMonthPickerOpen && (
-          <div className="absolute right-0 top-12 bg-white rounded-xl shadow-lg border border-[#e7eeff] p-1 z-20 min-w-32">
+          <div className="absolute right-0 top-12 bg-white rounded-xl shadow-lg border border-[#e7eeff] p-1 z-20 min-w-40">
             {months.map((m) => (
               <button
-                key={m}
+                key={m.label}
                 onClick={() => {
-                  setSelectedMonth(m);
+                  setSelectedMonthLabel(m.label);
                   setIsMonthPickerOpen(false);
                 }}
                 className={`w-full text-left px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                  selectedMonth === m
+                  selectedMonthLabel === m.label
                     ? 'bg-[#10b981] text-[#00422b] font-bold'
                     : 'text-[#111c2d] hover:bg-[#f0f3ff]'
                 }`}
               >
-                {m}
+                {m.label}
               </button>
             ))}
           </div>
@@ -79,16 +105,18 @@ export const StatsScreen: React.FC<StatsScreenProps> = ({ transactions, onNaviga
         <div className="flex justify-between items-start">
           <div>
             <span className="text-xs font-semibold text-[#3c4a42] uppercase tracking-wider">
-              Total Gastado
+              {isCurrentMonth ? 'Gastado este mes' : `Gastado en ${selectedMonthLabel}`}
             </span>
             <h2 className="text-4xl font-bold text-[#111c2d] mt-1 tracking-tight">
-              {formatCLP(totalAmount, true)}
+              {totalAmount > 0 ? formatCLP(totalAmount, true) : <span className="text-2xl text-[#a0a3a5]">Sin gastos</span>}
             </h2>
           </div>
-          <div className="bg-[#ffdad6] text-[#93000a] px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
-            <span className="material-symbols-outlined text-sm">trending_up</span>
-            <span>+12% vs. mes ant.</span>
-          </div>
+          {totalAmount > 0 && (
+            <div className="bg-[#ffdad6] text-[#93000a] px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
+              <span className="material-symbols-outlined text-sm">trending_up</span>
+              <span>+12% vs. mes ant.</span>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-3 gap-3 pt-3 border-t border-[#f0f3ff]">
