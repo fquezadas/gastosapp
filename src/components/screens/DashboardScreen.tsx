@@ -9,6 +9,31 @@ interface DashboardScreenProps {
   onOpenAllTransactions: () => void;
 }
 
+type TimePeriod = 'hoy' | 'semana' | 'mes';
+
+function getDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getPeriodRange(period: Exclude<TimePeriod, 'hoy'>): { start: string; end: string } {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  if (period === 'semana') {
+    const dayOfWeek = start.getDay();
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    start.setDate(start.getDate() - daysFromMonday);
+  } else {
+    start.setDate(1);
+  }
+
+  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return { start: getDateKey(start), end: getDateKey(end) };
+}
+
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   transactions,
   budget,
@@ -16,15 +41,51 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onOpenAllTransactions,
 }) => {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('todos');
-  const [timePeriod, setTimePeriod] = useState<'hoy' | 'semana' | 'mes'>('hoy');
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>('hoy');
 
   // Calculate today's micro expenses
   const todayTransactions = transactions.filter((tx) => tx.isToday);
   const spentToday = todayTransactions.reduce((acc, curr) => acc + curr.amount, 0);
 
   // Daily budget remaining
-  const remainingToday = Math.max(0, budget.dailyLimit - spentToday);
-  const progressPercentage = Math.min(100, Math.round((spentToday / budget.dailyLimit) * 100));
+  const remainingToday = budget.dailyLimit - spentToday;
+  const progressPercentage = budget.dailyLimit > 0
+    ? Math.min(100, Math.round((spentToday / budget.dailyLimit) * 100))
+    : 0;
+  const remainingPercentage = budget.dailyLimit > 0
+    ? remainingToday / budget.dailyLimit
+    : 0;
+  const budgetStatus = remainingPercentage <= 0
+    ? {
+        label: 'Límite alcanzado',
+        color: '#ba1a1a',
+        track: '#ffdad6',
+        shadow: '0 0 12px rgba(186, 26, 26, 0.45)',
+        pulse: true,
+      }
+    : remainingPercentage <= 0.15
+      ? {
+          label: 'Muy cerca del límite',
+          color: '#c2410c',
+          track: '#ffdcc5',
+          shadow: '0 0 10px rgba(194, 65, 12, 0.35)',
+          pulse: false,
+        }
+      : remainingPercentage <= 0.3
+        ? {
+            label: 'Acercándote al límite',
+            color: '#a16207',
+            track: '#fef3c7',
+            shadow: '0 0 8px rgba(161, 98, 7, 0.25)',
+            pulse: false,
+          }
+        : {
+            label: 'Presupuesto bajo control',
+            color: '#006c49',
+            track: '#e7eeff',
+            shadow: 'none',
+            pulse: false,
+          };
 
   // Filter transactions for the movements list
   const filteredTransactions = transactions.filter((tx) => {
@@ -40,8 +101,34 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     if (timePeriod === 'hoy') {
       return tx.isToday;
     }
-    return true;
+    const range = getPeriodRange(timePeriod);
+    return Boolean(/^\d{4}-\d{2}-\d{2}$/.test(tx.date) && tx.date >= range.start && tx.date <= range.end);
   });
+
+  const periodRange = timePeriod === 'hoy' ? null : getPeriodRange(timePeriod);
+  const periodTransactions = periodRange
+    ? transactions.filter((tx) => /^\d{4}-\d{2}-\d{2}$/.test(tx.date) && tx.date >= periodRange.start && tx.date <= periodRange.end)
+    : [];
+  const periodDays = timePeriod === 'semana' ? 7 : 30;
+  const periodSpent = periodTransactions.reduce((acc, tx) => acc + tx.amount, 0);
+  const periodLimit = budget.dailyLimit * periodDays;
+  const periodRemaining = periodLimit - periodSpent;
+  const periodProgress = periodLimit > 0 ? Math.min(100, Math.round((periodSpent / periodLimit) * 100)) : 0;
+  const periodRemainingRatio = periodLimit > 0 ? periodRemaining / periodLimit : 0;
+  const periodColor = periodRemainingRatio <= 0
+    ? '#ba1a1a'
+    : periodRemainingRatio <= 0.15
+      ? '#c2410c'
+      : periodRemainingRatio <= 0.3
+        ? '#a16207'
+        : '#006c49';
+  const periodTrack = periodRemainingRatio <= 0
+    ? '#ffdad6'
+    : periodRemainingRatio <= 0.15
+      ? '#ffdcc5'
+      : periodRemainingRatio <= 0.3
+        ? '#fef3c7'
+        : '#e7eeff';
 
   const getCategoryMeta = (cat: Transaction['category']) => {
     switch (cat) {
@@ -113,15 +200,29 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         {/* Progress bar */}
         <div className="flex flex-col gap-1.5">
           <div className="flex justify-between text-xs text-[#3c4a42]">
-            <span>Restante del día</span>
-            <span className="font-bold text-[#006c49]">
+            <span className={budgetStatus.pulse ? 'font-bold' : ''} style={{ color: budgetStatus.color }}>
+              {budgetStatus.label}
+            </span>
+            <span className="font-bold" style={{ color: budgetStatus.color }}>
               {formatCLP(remainingToday, true)}
             </span>
           </div>
-          <div className="w-full bg-[#e7eeff] h-3 rounded-full overflow-hidden p-0.5">
+          <div
+            className="w-full h-3 rounded-full overflow-hidden p-0.5 transition-colors duration-500"
+            style={{ backgroundColor: budgetStatus.track }}
+            aria-label={`Has utilizado el ${progressPercentage}% del presupuesto diario`}
+            role="progressbar"
+            aria-valuenow={progressPercentage}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
             <div
-              className="bg-[#10b981] h-full rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${progressPercentage}%` }}
+              className={`h-full rounded-full transition-all duration-500 ease-out ${budgetStatus.pulse ? 'animate-pulse' : ''}`}
+              style={{
+                width: `${progressPercentage}%`,
+                backgroundColor: budgetStatus.color,
+                boxShadow: budgetStatus.shadow,
+              }}
             ></div>
           </div>
         </div>
@@ -226,6 +327,40 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           Mes
         </button>
       </section>
+
+      {timePeriod !== 'hoy' && (
+        <section className="bg-white rounded-2xl p-4 shadow-sm border border-[#e7eeff] flex flex-col gap-2.5">
+          <div className="flex justify-between items-end text-xs text-[#3c4a42]">
+            <div>
+              <span className="font-semibold text-[#111c2d]">
+                Gastos de {timePeriod === 'semana' ? 'la semana' : 'este mes'}
+              </span>
+              <p className="mt-0.5">Límite: {formatCLP(periodLimit, true)}</p>
+            </div>
+            <span className="font-bold" style={{ color: periodColor }}>
+              {formatCLP(periodRemaining, true)} restante
+            </span>
+          </div>
+          <div
+            className="w-full h-3 rounded-full overflow-hidden p-0.5 transition-colors duration-500"
+            style={{ backgroundColor: periodTrack }}
+            aria-label={`Has utilizado el ${periodProgress}% del presupuesto de ${timePeriod}`}
+            role="progressbar"
+            aria-valuenow={periodProgress}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${periodProgress}%`, backgroundColor: periodColor }}
+            />
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-[#3c4a42]">Gastado</span>
+            <span className="font-bold text-[#111c2d]">{formatCLP(periodSpent, true)}</span>
+          </div>
+        </section>
+      )}
 
       {/* Detailed Movements List */}
       <section className="flex flex-col gap-3">

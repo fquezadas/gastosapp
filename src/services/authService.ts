@@ -39,7 +39,7 @@ export async function signInWithGoogle(): Promise<{ error: Error | null }> {
     const isNative = Capacitor.isNativePlatform();
     const redirectTo = isNative
       ? 'com.gastosapp.app://google-auth'
-      : window.location.origin;
+      : (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
