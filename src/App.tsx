@@ -17,7 +17,7 @@ import { BudgetSettingsScreen } from './components/screens/BudgetSettingsScreen'
 import { NotificationsModal } from './components/NotificationsModal';
 import { AllTransactionsModal } from './components/AllTransactionsModal';
 import { LoginScreen } from './components/LoginScreen';
-import { formatCLP } from './utils/formatters';
+import { formatCLP, getLocalDateKey } from './utils/formatters';
 import { isSupabaseConfigured } from './lib/supabase';
 import { getCurrentUser, onAuthStateChange, signOut } from './services/authService';
 import {
@@ -148,7 +148,7 @@ export default function App() {
 
   // Add Transaction Handler
   const handleAddTransaction = async (newTx: Omit<Transaction, 'id'>) => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateKey();
     const created: Transaction = {
       ...newTx,
       id: `tx-${Date.now()}`,
@@ -166,7 +166,7 @@ export default function App() {
 
     // Calculate today's spent after adding
     const todaySpent = updated
-      .filter((t) => t.isToday)
+      .filter((t) => t.date === todayStr)
       .reduce((acc, curr) => acc + curr.amount, 0);
 
     // Check 80% threshold

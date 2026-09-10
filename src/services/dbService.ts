@@ -6,6 +6,7 @@ import {
   INITIAL_CHALLENGES,
   SUGGESTED_CHALLENGES,
 } from '../data/mockData';
+import { getLocalDateKey } from '../utils/formatters';
 
 // Storage keys for local fallback
 const STORAGE_KEYS = {
@@ -52,7 +53,7 @@ export async function getTransactions(): Promise<Transaction[]> {
           category: row.category,
           amount: Number(row.amount),
           date: row.date,
-          isToday: Boolean(row.is_today),
+          isToday: row.date === getLocalDateKey(),
           notes: row.notes || undefined,
         }));
       }

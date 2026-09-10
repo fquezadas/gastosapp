@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Transaction, BudgetSettings, ScreenTab } from '../../types';
-import { formatCLP } from '../../utils/formatters';
+import { formatCLP, getLocalDateKey } from '../../utils/formatters';
 
 interface DashboardScreenProps {
   transactions: Transaction[];
@@ -42,9 +42,20 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 }) => {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('todos');
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('hoy');
+  const [todayKey, setTodayKey] = useState(() => getLocalDateKey());
+
+  useEffect(() => {
+    const refreshToday = () => {
+      const nextTodayKey = getLocalDateKey();
+      setTodayKey((currentTodayKey) => currentTodayKey === nextTodayKey ? currentTodayKey : nextTodayKey);
+    };
+
+    const intervalId = window.setInterval(refreshToday, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   // Calculate today's micro expenses
-  const todayTransactions = transactions.filter((tx) => tx.isToday);
+  const todayTransactions = transactions.filter((tx) => tx.date === todayKey);
   const spentToday = todayTransactions.reduce((acc, curr) => acc + curr.amount, 0);
 
   // Daily budget remaining
@@ -99,7 +110,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
     // Time period filter
     if (timePeriod === 'hoy') {
-      return tx.isToday;
+      return tx.date === todayKey;
     }
     const range = getPeriodRange(timePeriod);
     return Boolean(/^\d{4}-\d{2}-\d{2}$/.test(tx.date) && tx.date >= range.start && tx.date <= range.end);

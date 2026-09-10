@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BudgetSettings, Transaction, ScreenTab } from '../../types';
-import { formatCLP, formatNumberWithDots } from '../../utils/formatters';
+import { formatCLP, formatNumberWithDots, getLocalDateKey } from '../../utils/formatters';
 
 interface BudgetSettingsScreenProps {
   budget: BudgetSettings;
@@ -21,7 +21,7 @@ export const BudgetSettingsScreen: React.FC<BudgetSettingsScreenProps> = ({
 
   // Today's actual spending
   const spentToday = transactions
-    .filter((tx) => tx.isToday)
+    .filter((tx) => tx.date === getLocalDateKey())
     .reduce((acc, curr) => acc + curr.amount, 0);
 
   const remainingPreview = Math.max(0, budgetVal - spentToday);
