@@ -78,6 +78,14 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               <button
+                onClick={() => { setIsMenuOpen(false); onNavigate('bank'); }}
+                className="w-full text-left px-2.5 py-1.5 text-xs text-[#006c49] hover:bg-[#f0f3ff] rounded-xl flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-sm">account_balance</span>
+                <span>Compras bancarias</span>
+              </button>
+
+              <button
                 onClick={() => {
                   setIsMenuOpen(false);
                   onLogout();

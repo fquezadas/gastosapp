@@ -304,3 +304,21 @@ export async function saveChallengeProgress(challenge: Challenge): Promise<void>
     }
   }
 }
+
+// Stable notification IDs make retries safe if saving succeeds but native acknowledgement fails.
+export async function confirmBankTransaction(tx: Transaction): Promise<void> {
+  const userId = await getAuthUserId();
+  if (tx.userId && userId !== tx.userId) throw new Error('La sesión cambió. Vuelve a abrir la bandeja.');
+  if (tx.userId && supabase && isSupabaseConfigured()) {
+    const { error } = await supabase.from('transactions').upsert({
+      id: tx.id, user_id: tx.userId, title: tx.title, place: tx.place,
+      time: tx.time, category: tx.category, amount: tx.amount,
+      date: tx.date, is_today: tx.isToday, notes: tx.notes || null,
+    }, { onConflict: 'id' });
+    if (error) throw new Error('No se pudo guardar en tu cuenta. La compra sigue pendiente; intenta nuevamente.');
+    return;
+  }
+  const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+  const current: Transaction[] = saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS;
+  localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify([tx, ...current.filter(item => item.id !== tx.id)]));
+}

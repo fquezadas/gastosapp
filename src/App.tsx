@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ScreenTab, Transaction, BudgetSettings, Challenge, NotificationItem, UserProfile } from './types';
 import {
   INITIAL_BUDGET,
@@ -7,6 +7,8 @@ import {
   SUGGESTED_CHALLENGES,
   INITIAL_NOTIFICATIONS,
 } from './data/mockData';
+import { BankNotificationsScreen } from './components/screens/BankNotificationsScreen';
+import { bankNotifications, supportsBankNotifications } from './services/bankNotifications';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { DashboardScreen } from './components/screens/DashboardScreen';
@@ -21,6 +23,7 @@ import { formatCLP, getLocalDateKey } from './utils/formatters';
 import { isSupabaseConfigured } from './lib/supabase';
 import { getCurrentUser, onAuthStateChange, signOut } from './services/authService';
 import {
+  confirmBankTransaction,
   getTransactions,
   createTransaction,
   removeTransaction,
@@ -36,6 +39,7 @@ export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isGuestMode, setIsGuestMode] = useState<boolean>(false);
 
+  const bankOwner = useRef<string | null>(null);
   const isCloudConnected = isSupabaseConfigured();
 
   // Transactions State
@@ -127,6 +131,16 @@ export default function App() {
     };
   }, [user, isGuestMode]);
 
+  useEffect(() => {
+    const owner = user?.id || (isGuestMode ? 'guest' : '');
+    if (supportsBankNotifications && (owner || bankOwner.current)) {
+      bankOwner.current = owner;
+      void bankNotifications.setOwner({ owner }).catch(() => {
+        showToast('No se pudo preparar la lectura de compras bancarias');
+      });
+    }
+  }, [user?.id, isGuestMode]);
+
   // Sync notifications to localStorage
   useEffect(() => {
     localStorage.setItem('gastosapp_notifications', JSON.stringify(notifications));
@@ -140,7 +154,14 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    await signOut();
+    try {
+      if (supportsBankNotifications) await bankNotifications.setOwner({ owner: '' });
+      const { error } = await signOut();
+      if (error) throw error;
+    } catch {
+      showToast('No se pudo cerrar la sesión. Intenta nuevamente.');
+      return;
+    }
     setUser(null);
     setIsGuestMode(false);
     showToast('Sesión cerrada');
@@ -308,6 +329,18 @@ export default function App() {
             budget={budget}
             onNavigate={setCurrentTab}
             onOpenAllTransactions={() => setIsAllTransactionsOpen(true)}
+          />
+        )}
+
+        {currentTab === 'bank' && (
+          <BankNotificationsScreen
+            owner={user?.id || 'guest'}
+            onSave={async (tx) => {
+              const saved = { ...tx, userId: user?.id };
+              await confirmBankTransaction(saved);
+              setTransactions(prev => [saved, ...prev.filter(item => item.id !== saved.id)]);
+              showToast(`✓ Gasto de ${formatCLP(saved.amount)} registrado`);
+            }}
           />
         )}
 

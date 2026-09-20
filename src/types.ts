@@ -1,4 +1,4 @@
-export type ScreenTab = 'dashboard' | 'add' | 'stats' | 'savings' | 'budget';
+export type ScreenTab = 'dashboard' | 'add' | 'stats' | 'savings' | 'budget' | 'bank';
 
 export interface UserProfile {
   id: string;
