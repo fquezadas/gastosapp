@@ -14,7 +14,12 @@ public final class PurchaseParser {
         if (text == null || text.length() > 8000) return null;
         String normalized = Normalizer.normalize(text, Normalizer.Form.NFD)
             .replaceAll("\\p{M}", "").toLowerCase(java.util.Locale.ROOT);
-        if (!Pattern.compile("\\b(compra|compraste|comprado)\\b").matcher(normalized).find()) return null;
+        boolean isPurchase = Pattern.compile("\\b(compra|compraste|comprado)\\b").matcher(normalized).find();
+        // Scotia reports account-funded payments separately from card purchases.
+        // Keep this narrow: generic "pago" also covers card repayments and incoming payments.
+        boolean isAccountPayment = Pattern.compile("(?m)^\\s*se realizo un pago con tu cuenta corriente\\b")
+            .matcher(normalized).find();
+        if (!isPurchase && !isAccountPayment) return null;
         if (Pattern.compile("rechaz|anulad|revers|devol|intento|no realizada|no reconoc|codigo|clave|otp|autoriza|confirma|saldo|cupo|oferta|descuento|usd|us\\$|dolar|eur").matcher(normalized).find()) return null;
         Matcher money = Pattern.compile("(?:CLP\\s*\\$?|\\$)\\s*([0-9][0-9.,]*)(?![0-9])", Pattern.CASE_INSENSITIVE).matcher(text);
         if (!money.find()) return null;
@@ -27,6 +32,7 @@ public final class PurchaseParser {
         Matcher merchant = Pattern.compile("\\ben\\s+(.+?)(?=\\s+(?:con|por|el|a las|tarjeta)\\b|[.;\\n]|$)", Pattern.CASE_INSENSITIVE).matcher(text);
         String place = merchant.find() ? merchant.group(1).trim() : "";
         if (place.length() > 80 || place.contains("$") || place.matches(".*\\d{4,}.*")) place = "";
+        if (isAccountPayment && place.isEmpty()) return null;
         return new Purchase(amount, place);
     }
 }

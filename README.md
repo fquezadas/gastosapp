@@ -74,3 +74,11 @@ verificar que no reaparezca. Probar descarte, desactivación, cambio de cuenta y
 fallo de conexión al confirmar. Comparar con notificaciones reales para ajustar el
 lector; mensajes rechazados, autenticación, moneda extranjera y montos ambiguos se
 omiten. No registrar datos sensibles en logs durante estas pruebas.
+
+El lector también reconoce el formato Scotia «Se realizó un pago con tu Cuenta
+Corriente … por $18.823 en Servipag» y lo deja pendiente de revisión. No acepta
+cualquier mensaje que diga «pago»: los abonos y pagos a tarjetas (por ejemplo,
+«pago a tu Tarjeta Ripley») no se interpretan como compras. Si el pago en Servipag
+corresponde a una tarjeta cuyas compras ya registraste, descarta el pendiente para
+no duplicar el gasto. Esta distinción requiere revisión del usuario, ya que la
+notificación de Scotia no indica qué cuenta o servicio se pagó en Servipag.
