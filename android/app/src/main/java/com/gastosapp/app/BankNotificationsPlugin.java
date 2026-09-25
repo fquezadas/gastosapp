@@ -29,9 +29,17 @@ public class BankNotificationsPlugin extends Plugin {
         synchronized (BankStore.class) {
             try {
                 JSONObject data = owned(call);
+                boolean access = NotificationManagerCompat.getEnabledListenerPackages(getContext())
+                    .contains(getContext().getPackageName());
+                if (data.optBoolean("enabled") && access && !BankNotificationService.isConnected()) {
+                    BankNotificationService.requestReconnect(getContext());
+                }
                 JSObject result = new JSObject(data.toString());
                 result.put("pending", BankStore.pending(data));
-                result.put("access", NotificationManagerCompat.getEnabledListenerPackages(getContext()).contains(getContext().getPackageName()));
+                result.put("packageNames", BankStore.selectedPackages(data));
+                result.put("connected", BankNotificationService.isConnected());
+                result.put("reconnecting", BankNotificationService.isReconnecting());
+                result.put("access", access);
                 result.remove("seen");
                 call.resolve(result);
             } catch (Exception e) { call.reject("No se pudieron cargar las compras pendientes."); }
@@ -42,9 +50,18 @@ public class BankNotificationsPlugin extends Plugin {
             try {
                 JSONObject data = owned(call);
                 boolean enabled = call.getBoolean("enabled", false);
-                String packageName = call.getString("packageName", "");
-                if (enabled && (packageName.isEmpty() || getContext().getPackageManager().getLaunchIntentForPackage(packageName) == null)) throw new Exception();
-                data.put("enabled", enabled).put("packageName", packageName);
+                JSArray packageNames = call.getArray("packageNames", new JSArray());
+                if (enabled && packageNames.length() == 0) throw new Exception();
+                for (int index = 0; index < packageNames.length(); index++) {
+                    String packageName = packageNames.getString(index);
+                    if (getContext().getPackageManager().getLaunchIntentForPackage(packageName) == null) throw new Exception();
+                }
+                if (!packageNames.toString().equals(BankStore.selectedPackages(data).toString())) {
+                    data.remove("lastResult");
+                    data.remove("lastCheckedAt");
+                }
+                data.remove("packageName");
+                data.put("enabled", enabled).put("packageNames", new JSONArray(packageNames.toString()));
                 BankStore.write(getContext(), data);
                 call.resolve();
             } catch (Exception e) { call.reject("No se pudo cambiar la configuración."); }
@@ -63,6 +80,30 @@ public class BankNotificationsPlugin extends Plugin {
                 call.resolve();
             } catch (Exception e) { call.reject("No se pudo quitar la compra pendiente."); }
         }
+    }
+    @PluginMethod public void reviewVisible(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            synchronized (BankStore.class) {
+                try {
+                    JSONObject data = owned(call);
+                    if (!data.optBoolean("enabled")) { call.reject("Activa la lectura primero."); return; }
+                    if (!NotificationManagerCompat.getEnabledListenerPackages(getContext()).contains(getContext().getPackageName())) {
+                        call.reject("Habilita el acceso a notificaciones en Android."); return;
+                    }
+                    if (!BankNotificationService.isConnected()) {
+                        BankNotificationService.requestReconnect(getContext());
+                        call.reject("Se solicitó reconectar el servicio. Espera unos segundos y vuelve a revisar. Si continúa desconectado, desactiva y activa el acceso en Android.");
+                        return;
+                    }
+                    int before = BankStore.pending(data).length();
+                    BankNotificationService.reviewVisible();
+                    JSONObject updated = owned(call);
+                    JSObject response = new JSObject();
+                    response.put("added", BankStore.pending(updated).length() - before);
+                    call.resolve(response);
+                } catch (Exception e) { call.reject("No se pudieron revisar las notificaciones visibles. Comprueba el acceso en Android."); }
+            }
+        });
     }
     @PluginMethod public void openSettings(PluginCall call) {
         try { getActivity().startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); call.resolve(); }

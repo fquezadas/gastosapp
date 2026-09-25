@@ -22,4 +22,17 @@ final class BankStore {
         return new AtomicFile(new File(context.getNoBackupFilesDir(), "bank-notifications.json"));
     }
     static JSONArray pending(JSONObject data) { return data.optJSONArray("pending") == null ? new JSONArray() : data.optJSONArray("pending"); }
+    static JSONArray selectedPackages(JSONObject data) {
+        JSONArray packages = data.optJSONArray("packageNames");
+        if (packages != null) return packages;
+        String legacyPackage = data.optString("packageName");
+        return legacyPackage.isEmpty() ? new JSONArray() : new JSONArray().put(legacyPackage);
+    }
+    static boolean isSelected(JSONObject data, String packageName) {
+        JSONArray packages = selectedPackages(data);
+        for (int index = 0; index < packages.length(); index++) {
+            if (packageName.equals(packages.optString(index))) return true;
+        }
+        return false;
+    }
 }

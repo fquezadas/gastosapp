@@ -46,7 +46,9 @@ Las nuevas compras reconocibles aparecen como pendientes. Revisa monto, comercio
 fecha y categoría antes de confirmar; también puedes descartarlas. La fecha inicial
 es la de recepción, no necesariamente la de la transacción. La captura requiere el
 servicio de Android habilitado y está sujeta a restricciones del sistema/fabricante.
-No se recupera un historial de notificaciones anteriores a la activación. Web e iOS
+No se recupera el historial de notificaciones descartadas. El botón **Revisar
+notificaciones visibles** permite procesar, a petición del usuario, las notificaciones
+que todavía estén en el panel, incluso si llegaron antes de activar la lectura. Web e iOS
 muestran que esta función requiere Android.
 
 El servicio procesa únicamente el paquete seleccionado. Guarda hasta 200 pendientes
@@ -82,3 +84,29 @@ cualquier mensaje que diga «pago»: los abonos y pagos a tarjetas (por ejemplo,
 corresponde a una tarjeta cuyas compras ya registraste, descarta el pendiente para
 no duplicar el gasto. Esta distinción requiere revisión del usuario, ya que la
 notificación de Scotia no indica qué cuenta o servicio se pagó en Servipag.
+
+
+La pantalla distingue permiso concedido de servicio realmente conectado. Muestra
+fecha y resultado de la última revisión de una notificación individual del banco
+seleccionado (reconocida, duplicada, sin texto, formato no admitido, bandeja llena o
+error). Estos diagnósticos no guardan el texto original ni datos de la tarjeta.
+Si el servicio está desconectado, el botón de revisión solicita reconexión; esperar
+unos segundos y reintentar. Si persiste, volver a habilitar el acceso en Android.
+La app también solicita la reconexión automáticamente al detectar permiso concedido
+con el servicio desconectado, y limita los intentos a uno cada 15 segundos. En Xiaomi,
+configurar GastosApp en **Batería > Sin restricciones** y permitir **Inicio automático**
+puede evitar que el sistema limite el proceso cuando permanece en segundo plano.
+
+Se pueden activar varias fuentes a la vez. Actualmente se interpreta el formato de
+compras de App Scotia y el aviso de transacción de Billetera de Google, por ejemplo
+«MINIMARKET NICOLL / CLP3,290 con Visa Débito…». Cada pendiente indica su origen.
+Si Scotia y Wallet informan la misma operación, aparecerán dos pendientes: confirmar
+solo uno y descartar el otro. Para otras aplicaciones se necesitan ejemplos reales
+de sus notificaciones antes de declararlas compatibles.
+Las notificaciones resumen de grupos siguen excluidas; se procesan sus elementos.
+
+Validación manual de recuperación: mantener una notificación de Scotia visible,
+actualizar GastosApp, revisar el estado del servicio y pulsar el botón. Verificar
+que la compra se propone una sola vez, incluso al repetir la revisión o después
+de descartarla/confirmarla. Comprobar también permiso revocado, servicio desconectado
+y otra aplicación seleccionada. La captura de Google Wallet aún no está integrada.

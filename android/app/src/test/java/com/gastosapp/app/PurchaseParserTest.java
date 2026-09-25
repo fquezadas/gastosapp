@@ -39,6 +39,27 @@ public class PurchaseParserTest {
         };
         for (String message : messages) assertNull(message, PurchaseParser.parse(message));
     }
+    @Test public void readsSeptember22ScotiaNotification() {
+        PurchaseParser.Purchase item = PurchaseParser.parse("App Scotia\n"
+            + "Se realizó compra con tu tarjeta de débito xxxx0000 por $3.290 en MINIMARKET NICO. "
+            + "Si desconoces esta operación puedes apagar o bloquear tus tarjetas desde tu ScotiaWeb "
+            + "o tu App ScotiabankGO. En caso de dudas contáctanos al 600 600 1100.");
+        assertNotNull(item);
+        assertEquals(3290, item.amount);
+        assertEquals("MINIMARKET NICO", item.merchant);
+    }
+    @Test public void readsGoogleWalletTransactionNotification() {
+        PurchaseParser.Purchase item = PurchaseParser.parseGoogleWallet("MINIMARKET NICOLL\n"
+            + "CLP3,290 con Visa Débito Scotiabank ••3173");
+        assertNotNull(item);
+        assertEquals(3290, item.amount);
+        assertEquals("MINIMARKET NICOLL", item.merchant);
+    }
+    @Test public void rejectsGoogleWalletLikeMessagesOutsideItsFormat() {
+        assertNull(PurchaseParser.parseGoogleWallet("MINIMARKET NICOLL\nCLP3,290"));
+        assertNull(PurchaseParser.parseGoogleWallet("MINIMARKET NICOLL\nUSD3,290 con Visa"));
+        assertNull(PurchaseParser.parseGoogleWallet("\nCLP3,290 con Visa"));
+    }
     @Test public void readsClpPurchase() {
         PurchaseParser.Purchase item = PurchaseParser.parse("Compra por $12.990 en LIDER con tu tarjeta terminada en 1234");
         assertNotNull(item); assertEquals(12990, item.amount); assertEquals("LIDER", item.merchant);
