@@ -35,4 +35,13 @@ final class BankStore {
         }
         return false;
     }
+    static void recordServiceEvent(Context context, String event) {
+        try {
+            JSONObject data = read(context);
+            data.put("lastServiceEvent", event).put("lastServiceEventAt", System.currentTimeMillis());
+            write(context, data);
+        } catch (Exception ignored) {
+            // Diagnostics must never interfere with notification capture.
+        }
+    }
 }

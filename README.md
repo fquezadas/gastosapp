@@ -92,17 +92,27 @@ seleccionado (reconocida, duplicada, sin texto, formato no admitido, bandeja lle
 error). Estos diagnósticos no guardan el texto original ni datos de la tarjeta.
 Si el servicio está desconectado, el botón de revisión solicita reconexión; esperar
 unos segundos y reintentar. Si persiste, volver a habilitar el acceso en Android.
-La app también solicita la reconexión automáticamente al detectar permiso concedido
-con el servicio desconectado, y limita los intentos a uno cada 15 segundos. En Xiaomi,
+La app también solicita hasta dos reconexiones automáticas al detectar permiso
+concedido con el servicio desconectado, separadas por 15 segundos. Si Android no
+completa el enlace, la pantalla muestra **Servicio desconectado** y ofrece
+**Reintentar conexión**, en vez de indicar una reconexión permanente. En Xiaomi,
 configurar GastosApp en **Batería > Sin restricciones** y permitir **Inicio automático**
 puede evitar que el sistema limite el proceso cuando permanece en segundo plano.
+Cuando permanece desconectado, la pantalla muestra el último evento nativo
+(creado, conectado, desconectado o finalizado por Android) y su hora. Este
+diagnóstico no conserva texto ni contenido de notificaciones.
 
 Se pueden activar varias fuentes a la vez. Actualmente se interpreta el formato de
 compras de App Scotia y el aviso de transacción de Billetera de Google, por ejemplo
 «MINIMARKET NICOLL / CLP3,290 con Visa Débito…». Cada pendiente indica su origen.
-Si Scotia y Wallet informan la misma operación, aparecerán dos pendientes: confirmar
-solo uno y descartar el otro. Para otras aplicaciones se necesitan ejemplos reales
-de sus notificaciones antes de declararlas compatibles.
+Si Scotia y Wallet informan la misma operación, GastosApp intenta agruparlas en un
+solo pendiente. Para otras aplicaciones se necesitan ejemplos reales de sus
+notificaciones antes de declararlas compatibles.
+
+Las versiones actuales agrupan automáticamente pendientes de fuentes distintas si
+tienen el mismo monto, comercios equivalentes y llegan con una diferencia máxima de
+dos minutos. El pendiente conserva ambos orígenes. Operaciones separadas con igual
+monto en el mismo comercio fuera de esa ventana permanecen separadas.
 Las notificaciones resumen de grupos siguen excluidas; se procesan sus elementos.
 
 Validación manual de recuperación: mantener una notificación de Scotia visible,

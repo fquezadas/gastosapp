@@ -6,6 +6,7 @@ export interface PendingPurchase {
   merchant: string;
   receivedAt: number;
   source?: string;
+  sources?: string[];
 }
 export interface BankState {
   enabled?: boolean;
@@ -13,6 +14,9 @@ export interface BankState {
   access: boolean;
   connected?: boolean;
   reconnecting?: boolean;
+  reconnectAttempts?: number;
+  lastServiceEvent?: 'created' | 'connected' | 'disconnected' | 'destroyed';
+  lastServiceEventAt?: number;
   lastResult?: string;
   lastCheckedAt?: number;
   pending: PendingPurchase[];
@@ -25,6 +29,7 @@ interface BankNotificationsPlugin {
   listApps(): Promise<{ apps: { packageName: string; label: string }[] }>;
   openSettings(): Promise<void>;
   reviewVisible(options: { owner: string }): Promise<{ added: number }>;
+  reconnect(options: { owner: string }): Promise<{ requested: boolean }>;
 }
 export const supportsBankNotifications = Capacitor.getPlatform() === 'android';
 export const bankNotifications = registerPlugin<BankNotificationsPlugin>('BankNotifications');

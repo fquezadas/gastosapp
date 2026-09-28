@@ -90,13 +90,22 @@ export function BankNotificationsScreen({ owner, onSave }: Props) {
             <span>{app.label}</span>
           </label>) : <p className="text-sm text-slate-600">No se encontraron aplicaciones compatibles instaladas.</p>}
         </fieldset>
-        <p className="text-sm">{state.enabled ? (state.access ? (state.connected ? 'Lectura activada · Servicio conectado' : state.reconnecting ? 'Permiso concedido · Reconectando servicio…' : 'Permiso concedido · Servicio desconectado') : 'Falta permitir el acceso en Android') : 'Lectura desactivada'}</p>
+        <p className="text-sm">{state.enabled ? (state.access ? (state.connected ? 'Lectura activada · Servicio conectado' : state.reconnecting ? 'Permiso concedido · Intentando reconectar…' : 'Permiso concedido · Servicio desconectado') : 'Falta permitir el acceso en Android') : 'Lectura desactivada'}</p>
         <button disabled={!ready || busy || (!state.enabled && selectedPackages.length === 0)} className="w-full rounded-xl bg-[#006c49] text-white p-3 disabled:opacity-50" onClick={() => void perform(async () => {
           await bankNotifications.configure({ owner, packageNames: selectedPackages, enabled: !state.enabled });
           const next = await refresh();
           if (next.enabled && !next.access) await bankNotifications.openSettings();
         })}>{state.enabled ? 'Desactivar lectura' : 'Activar lectura'}</button>
         <button disabled={busy} className="text-sm text-[#006c49] underline" onClick={() => void perform(() => bankNotifications.openSettings())}>Administrar acceso en Android</button>
+        {state.enabled && state.access && !state.connected && <button disabled={busy || state.reconnecting} className="w-full rounded-xl border border-[#006c49] text-[#006c49] p-3 disabled:opacity-50" onClick={() => void perform(async () => {
+          const result = await bankNotifications.reconnect({ owner });
+          await refresh();
+          setReviewMessage(result.requested ? 'Se solicitó la reconexión. Espera unos segundos.' : 'Android ya tiene un intento de conexión en curso.');
+        })}>Reintentar conexión</button>}
+        {state.enabled && state.access && !state.connected && state.reconnectAttempts && state.reconnectAttempts >= 2 && <button disabled={busy} className="w-full rounded-xl border border-amber-700 text-amber-800 p-3 disabled:opacity-50" onClick={() => void perform(async () => {
+          await bankNotifications.openSettings();
+          setReviewMessage('En Android, desactiva y vuelve a activar “Permitir acceso a las notificaciones” para GastosApp. Al regresar, la pantalla comprobará la conexión.');
+        })}>Restablecer acceso en Android</button>}
         <button disabled={!ready || busy || !state.enabled || !state.access} className="w-full rounded-xl border border-[#006c49] text-[#006c49] p-3 disabled:opacity-50" onClick={() => void perform(async () => {
           setReviewMessage('');
           const result = await bankNotifications.reviewVisible({ owner });
@@ -104,11 +113,18 @@ export function BankNotificationsScreen({ owner, onSave }: Props) {
           setReviewMessage(result.added > 0 ? `${result.added} compra(s) agregada(s) para revisar.` : 'No se agregaron compras. Revisa el estado de abajo y comprueba que la notificación de la aplicación seleccionada siga visible.');
         })}>Revisar notificaciones visibles</button>
         <p className="text-xs text-slate-500">Este botón revisa notificaciones anteriores que aún estén en el panel de Android, solo de las fuentes activas. No recupera las que ya descartaste.</p>
-        {state.enabled && state.access && !state.connected && <p className="text-xs text-amber-700">GastosApp está solicitando la reconexión automáticamente. En teléfonos Xiaomi, configura GastosApp sin restricciones de batería y permite el inicio automático para reducir desconexiones en segundo plano.</p>}
+        {state.enabled && state.access && !state.connected && <p className="text-xs text-amber-700">{state.reconnectAttempts && state.reconnectAttempts >= 2 ? 'Android no completó los intentos automáticos. Usa “Restablecer acceso en Android” y, en Ajustes, apaga y vuelve a encender el permiso de GastosApp.' : 'GastosApp está solicitando la reconexión automáticamente.'} En teléfonos Xiaomi, configura GastosApp sin restricciones de batería y permite el inicio automático para reducir desconexiones en segundo plano.</p>}
+        {state.enabled && !state.connected && state.lastServiceEvent && <p className="text-xs text-slate-600">Diagnóstico: último evento del servicio: {({
+          created: 'creado',
+          connected: 'conectado',
+          disconnected: 'desconectado',
+          destroyed: 'finalizado por Android',
+        } as const)[state.lastServiceEvent]}{state.lastServiceEventAt ? ' · ' + new Date(state.lastServiceEventAt).toLocaleString('es-CL') : ''}.</p>}
         {reviewMessage && <p role="status" className="text-sm">{reviewMessage}</p>}
         <p className="text-xs text-slate-600">Última revisión: {state.lastCheckedAt ? new Date(state.lastCheckedAt).toLocaleString('es-CL') : 'Todavía no se recibió una notificación de una fuente activa.'}</p>
         {state.lastResult && <p className="text-xs text-slate-600">{{
           captured: 'Compra reconocida y guardada como pendiente.',
+          merged: 'Compra agrupada con un pendiente existente de otra fuente.',
           duplicate: 'Notificación ya procesada; no se volvió a agregar.',
           full: 'La bandeja está llena. Revisa o descarta pendientes.',
           empty: 'Android entregó una notificación sin texto legible.',
@@ -123,7 +139,7 @@ export function BankNotificationsScreen({ owner, onSave }: Props) {
       {ready && state.pending.length === 0 && <p className="text-sm text-slate-600">Todavía no hay compras pendientes. Aparecerán aquí cuando llegue una notificación compatible.</p>}
       {state.pending.map(item => <article key={item.id} className="bg-white rounded-2xl border border-[#e7eeff] p-4 space-y-3">
         <p className="font-semibold">{formatCLP(item.amount)} · {item.merchant || 'Comercio por completar'}</p>
-        {item.source && <p className="text-xs text-slate-500">Origen: {item.source}</p>}
+        {(item.sources?.length || item.source) && <p className="text-xs text-slate-500">Origen: {(item.sources?.length ? item.sources : [item.source]).join(' + ')}</p>}
         <p className="text-xs text-slate-500">Recibida: {new Date(item.receivedAt).toLocaleString('es-CL')}</p>
         {editing?.id === item.id ? <form className="space-y-3" onSubmit={event => {
           event.preventDefault();

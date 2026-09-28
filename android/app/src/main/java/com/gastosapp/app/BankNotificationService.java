@@ -3,6 +3,8 @@ package com.gastosapp.app;
 import android.app.Notification;
 import android.content.ComponentName;
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import org.json.*;
@@ -11,31 +13,47 @@ import java.util.UUID;
 
 public class BankNotificationService extends NotificationListenerService {
     private static final long REBIND_COOLDOWN_MS = 15_000L;
+    private static final long DISCONNECT_REBIND_DELAY_MS = 1_000L;
+    private static final int MAX_AUTOMATIC_RECONNECTS = 2;
     private static volatile BankNotificationService connected;
     private static volatile long lastRebindRequestAt;
+    private static volatile int reconnectAttempts;
 
     public static boolean isConnected() { return connected != null; }
     public static boolean isReconnecting() {
-        return !isConnected() && System.currentTimeMillis() - lastRebindRequestAt < REBIND_COOLDOWN_MS;
+        return !isConnected() && lastRebindRequestAt > 0
+            && System.currentTimeMillis() - lastRebindRequestAt < REBIND_COOLDOWN_MS;
     }
-    public static boolean requestReconnect(Context context) {
+    public static int reconnectAttempts() { return reconnectAttempts; }
+    public static boolean requestReconnect(Context context, boolean manual) {
         if (isConnected()) return false;
         long now = System.currentTimeMillis();
         if (now - lastRebindRequestAt < REBIND_COOLDOWN_MS) return false;
+        if (!manual && reconnectAttempts >= MAX_AUTOMATIC_RECONNECTS) return false;
         lastRebindRequestAt = now;
+        reconnectAttempts++;
         requestRebind(new ComponentName(context, BankNotificationService.class));
         return true;
+    }
+    @Override public void onCreate() {
+        super.onCreate();
+        BankStore.recordServiceEvent(this, "created");
     }
     @Override public void onListenerConnected() {
         connected = this;
         lastRebindRequestAt = 0L;
+        reconnectAttempts = 0;
+        BankStore.recordServiceEvent(this, "connected");
     }
     @Override public void onListenerDisconnected() {
         if (connected == this) connected = null;
-        requestReconnect(this);
+        BankStore.recordServiceEvent(this, "disconnected");
+        new Handler(Looper.getMainLooper()).postDelayed(
+            () -> requestReconnect(this, false), DISCONNECT_REBIND_DELAY_MS);
     }
     @Override public void onDestroy() {
         if (connected == this) connected = null;
+        BankStore.recordServiceEvent(this, "destroyed");
         super.onDestroy();
     }
     // Invoked on the main thread by the plugin, only following an explicit user request.
@@ -84,10 +102,33 @@ public class BankNotificationService extends NotificationListenerService {
                 for (String key : expired) seen.remove(key);
                 if (seen.has(id)) { result(data, "duplicate"); return; }
                 JSONArray pending = BankStore.pending(data);
+                String source = sourceLabel(sbn.getPackageName());
+                for (int index = 0; index < pending.length(); index++) {
+                    JSONObject existing = pending.getJSONObject(index);
+                    if (!PurchaseDeduplicator.representsSamePurchase(
+                        existing.optLong("amount"), existing.optString("merchant"), existing.optLong("receivedAt"),
+                        purchase.amount, purchase.merchant, sbn.getPostTime())) continue;
+                    JSONArray sources = existing.optJSONArray("sources");
+                    if (sources == null) {
+                        sources = new JSONArray();
+                        String legacySource = existing.optString("source");
+                        if (!legacySource.isEmpty()) sources.put(legacySource);
+                    }
+                    boolean alreadyPresent = false;
+                    for (int sourceIndex = 0; sourceIndex < sources.length(); sourceIndex++) {
+                        if (source.equals(sources.optString(sourceIndex))) alreadyPresent = true;
+                    }
+                    if (!alreadyPresent) sources.put(source);
+                    existing.put("sources", sources);
+                    seen.put(id, now);
+                    data.put("pending", pending).put("seen", seen);
+                    result(data, "merged");
+                    return;
+                }
                 if (pending.length() >= 200) { result(data, "full"); return; }
                 pending.put(new JSONObject().put("id", id).put("amount", purchase.amount)
                     .put("merchant", purchase.merchant).put("receivedAt", sbn.getPostTime())
-                    .put("source", sourceLabel(sbn.getPackageName())));
+                    .put("source", source).put("sources", new JSONArray().put(source)));
                 seen.put(id, now);
                 data.put("pending", pending).put("seen", seen);
                 result(data, "captured");

@@ -32,13 +32,14 @@ public class BankNotificationsPlugin extends Plugin {
                 boolean access = NotificationManagerCompat.getEnabledListenerPackages(getContext())
                     .contains(getContext().getPackageName());
                 if (data.optBoolean("enabled") && access && !BankNotificationService.isConnected()) {
-                    BankNotificationService.requestReconnect(getContext());
+                    BankNotificationService.requestReconnect(getContext(), false);
                 }
                 JSObject result = new JSObject(data.toString());
                 result.put("pending", BankStore.pending(data));
                 result.put("packageNames", BankStore.selectedPackages(data));
                 result.put("connected", BankNotificationService.isConnected());
                 result.put("reconnecting", BankNotificationService.isReconnecting());
+                result.put("reconnectAttempts", BankNotificationService.reconnectAttempts());
                 result.put("access", access);
                 result.remove("seen");
                 call.resolve(result);
@@ -91,8 +92,11 @@ public class BankNotificationsPlugin extends Plugin {
                         call.reject("Habilita el acceso a notificaciones en Android."); return;
                     }
                     if (!BankNotificationService.isConnected()) {
-                        BankNotificationService.requestReconnect(getContext());
-                        call.reject("Se solicitó reconectar el servicio. Espera unos segundos y vuelve a revisar. Si continúa desconectado, desactiva y activa el acceso en Android.");
+                        if (BankNotificationService.requestReconnect(getContext(), true)) {
+                            call.reject("Se solicitó reconectar el servicio. Espera unos segundos y vuelve a revisar.");
+                        } else {
+                            call.reject("El servicio sigue desconectado. Usa “Reintentar conexión” o revisa el acceso en Android.");
+                        }
                         return;
                     }
                     int before = BankStore.pending(data).length();
@@ -104,6 +108,21 @@ public class BankNotificationsPlugin extends Plugin {
                 } catch (Exception e) { call.reject("No se pudieron revisar las notificaciones visibles. Comprueba el acceso en Android."); }
             }
         });
+    }
+    @PluginMethod public void reconnect(PluginCall call) {
+        synchronized (BankStore.class) {
+            try {
+                JSONObject data = owned(call);
+                if (!data.optBoolean("enabled")) { call.reject("Activa la lectura primero."); return; }
+                if (!NotificationManagerCompat.getEnabledListenerPackages(getContext()).contains(getContext().getPackageName())) {
+                    call.reject("Habilita el acceso a notificaciones en Android."); return;
+                }
+                boolean requested = BankNotificationService.requestReconnect(getContext(), true);
+                JSObject response = new JSObject();
+                response.put("requested", requested);
+                call.resolve(response);
+            } catch (Exception error) { call.reject("No se pudo solicitar la reconexión."); }
+        }
     }
     @PluginMethod public void openSettings(PluginCall call) {
         try { getActivity().startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); call.resolve(); }
